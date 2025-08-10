@@ -263,10 +263,19 @@ def decode_pos_sections(payload, start_num):
         next_byte = start_num + 5
         name = "lon"
     elif payload[start_num] == 24: #0x18
-        alt = payload[start_num+1]
-        section_json = {"name": "Altitude", "data": alt}
-        next_byte = start_num + 2
-        name = "alt"
+        print(payload[3])
+        if payload[3] == 33: #0x21
+            alt = payload[start_num+1]
+            section_json = {"name": "Altitude", "data": alt}
+            next_byte = start_num + 2
+            name = "alt"
+        elif payload[3] == 37: #0x25
+            alt = payload[start_num+1]
+            section_json = {"name": "Altitude", "data": alt}
+            next_byte = start_num + 3
+            name = "alt"
+        else:
+            print(f"a differnt payload[3] found {payload[3]}")
     elif payload[start_num] == 37: #0x25
         time_b = payload[start_num+1:start_num+5]
         time = int.from_bytes(time_b, 'little')
