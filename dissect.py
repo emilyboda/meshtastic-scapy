@@ -247,7 +247,6 @@ def decode_textmessage(payload):
     return results
 
 def decode_pos_sections(payload, start_num):
-    # print(, start_num)
     if payload[start_num] == 13: #0x0d
         pos_lat_b = payload[start_num+1:start_num+5]
         pos_lat_raw = struct.unpack('<i', pos_lat_b)[0]
@@ -263,19 +262,17 @@ def decode_pos_sections(payload, start_num):
         next_byte = start_num + 5
         name = "lon"
     elif payload[start_num] == 24: #0x18
-        print(payload[3])
-        if payload[3] == 33: #0x21
+        if payload[start_num+2] == 1: #0x01
             alt = payload[start_num+1]
-            section_json = {"name": "Altitude", "data": alt}
-            next_byte = start_num + 2
-            name = "alt"
-        elif payload[3] == 37: #0x25
-            alt = payload[start_num+1]
-            section_json = {"name": "Altitude", "data": alt}
             next_byte = start_num + 3
-            name = "alt"
+        elif payload[start_num+2] == 255: #0xff
+            alt = payload[start_num+1] - 256
+            next_byte = start_num + 11
         else:
-            print(f"a differnt payload[3] found {payload[3]}")
+            alt = payload[start_num+1]
+            next_byte = start_num + 2
+        section_json = {"name": "Altitude", "data": alt}
+        name = "alt"
     elif payload[start_num] == 37: #0x25
         time_b = payload[start_num+1:start_num+5]
         time = int.from_bytes(time_b, 'little')
@@ -288,6 +285,19 @@ def decode_pos_sections(payload, start_num):
         section_json = {"name": "Location Source", "data": f"{source_name} [{source}]"}
         next_byte = start_num + 2
         name = "loc_source"
+    elif payload[start_num] == 88: #0x58
+        pdop = payload[start_num+1:start_num+3] # TODO: Figure out how this is translated to a number
+        section_json = {"name": "PDOP", "data": f"{pdop}"}
+        next_byte = start_num + 3
+        name = "pdop"
+    elif payload[start_num] == 120: #0x78
+        ground_speed = payload[start_num+1]
+        section_json = {"name": "Ground Speed", "data": f"{ground_speed}"}
+        next_byte = start_num + 2
+        name = "g_speed"
+    elif payload[start_num] == 128: #0x80 (actually 0x80 0x01)
+        ground_track = payload[start_num+2]
+        ground_track = payload[start_num+2:start_num+6] # some it's just one byte and some it's lots of bytes and I can't figure out where the length is
     else:
         print(f"nothing for startbyte {payload[start_num]} was found")
     return name, section_json, next_byte
@@ -395,9 +405,9 @@ def process_pcap(filename):
             payload_start = decrypted_payload[0:4]
             payload_portnum = decrypted_payload[1]
             if payload_portnum in valid_portnums:
-                # print(f"    Meshtastic:")
-                # print(f"        Destination Node: {meshtastic_destination_node}")
-                # print(f"        Sender Node: {meshtastic_sender_node}")
+                print(f"    Meshtastic:")
+                print(f"        Destination Node: {meshtastic_destination_node}")
+                print(f"        Sender Node: {meshtastic_sender_node}")
                 # print(f"        Packet ID: {meshtastic_packet_id.hex()}")
                 # print(f"        Flags: {meshtastic_flags}")
                 # print(f"        Channel Hash: {meshtastic_channel_hash}")
@@ -421,22 +431,20 @@ def process_pcap(filename):
                         for i in results:
                             print(f"            {results[i]["name"]}: {results[i]["data"]}")
                         
-                    elif payload_portnum == 4: # nodeinfo
-                        results = decode_nodeinfo(decrypted_payload)
-                        print(f"        NODEINFO_APP:")
-                        for i in results:
-                            print(f"            {results[i]["name"]}: {results[i]["data"]}")
-                        
+                    # elif payload_portnum == 4: # nodeinfo
+                    #     results = decode_nodeinfo(decrypted_payload)
+                    #     print(f"        NODEINFO_APP:")
+                    #     for i in results:
+                    #         print(f"            {results[i]["name"]}: {results[i]["data"]}")
+                    elif payload_portnum == 67: # telemetry
+                        telemetry = telemetry_pb2.Telemetry()
+                        telemetry.ParseFromString(decrypted_payload)
+                        print("time:", telemetry.time)
+                        print("  battery_level:", telemetry.device_metrics.battery_level)
                 except Exception as e:
                     print(f"Malformed packet: {e}")
-
-
-
-
             else:
                 print("Malformed packet")
-
-
         else:
             rest = raw[15:]
             print(f"    Rest of bytes (hex): {rest.hex()}")
